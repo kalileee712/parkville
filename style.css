@@ -24,6 +24,7 @@ button { cursor: pointer; }
 .btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 9px 16px; font-weight: 600; }
 .btn:hover { background: var(--tint); }
 .btn.primary { background: #f0a020; border-color: #f0a020; color: #1b1300; } .btn.primary:hover { background: #ffb53d; }
+.btn:disabled { opacity: .45; cursor: default; } .saver .btn { margin-left: 6px; }
 .btn.xl { font-size: 1.25rem; padding: 16px 28px; width: 100%; }
 
 main { min-width: 0; padding: 16px 0 40px; }

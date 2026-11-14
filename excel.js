@@ -85,9 +85,9 @@
     });
     x += '</sheetData>';
     if (sh.merges && sh.merges.length) x += `<mergeCells count="${sh.merges.length}">` + sh.merges.map((m) => `<mergeCell ref="${m}"/>`).join('') + '</mergeCells>';
-    if (sh.fitWidth) x += '<printOptions horizontalCentered="1"/><pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>';
+    if (sh.fitWidth) x += '<printOptions horizontalCentered="1" verticalCentered="1"/><pageMargins left="0.3" right="0.3" top="0.3" bottom="0.3" header="0.2" footer="0.2"/>';
     else x += '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>';
-    x += `<pageSetup paperSize="9" orientation="portrait"${sh.fitWidth ? ' fitToWidth="1"' : ''} fitToHeight="0"/>`;
+    x += `<pageSetup paperSize="9" orientation="${sh.landscape ? 'landscape' : 'portrait'}"${sh.fitWidth ? ' fitToWidth="1"' : ''} fitToHeight="0"/>`;
     if (sh.breaks && sh.breaks.length) x += `<rowBreaks count="${sh.breaks.length}" manualBreakCount="${sh.breaks.length}">` + sh.breaks.map((b) => `<brk id="${b}" max="16383" man="1"/>`).join('') + '</rowBreaks>';
     return x + '</worksheet>';
   }

@@ -195,7 +195,7 @@
   const TAB_NAME = { meter: '전기 검침', pay: '임대료·관리비 납부현황' };
   const locked = (ym = S.cur, tab = S.tab) => !!(M(ym).lock && M(ym).lock[tab]);
   const lockBar = () => locked() ? `<div class="lockbar" role="note"><b>저장 완료 — ${ymLong(S.cur)} ${TAB_NAME[S.tab]}은(는) 수정할 수 없습니다.</b>
-    <span>${S.cur < FIRST_PAY_MONTH ? '이전 관리 파일에서 옮긴 기록입니다.' : ''}</span><a href="#" data-act="unlock">잘못 저장했을 때: 잠금 풀기</a></div>` : '';
+    <span>${S.cur < FIRST_PAY_MONTH ? '이전 관리 파일에서 옮긴 기록입니다.' : ''}</span><span>고치려면 위쪽의 「수정」 버튼을 누르세요.</span></div>` : '';
 
   /* ---------- 화면 그리기 · 입력 처리 ---------- */
   const app = document.getElementById('app');
@@ -207,7 +207,7 @@
       <button role="tab" aria-selected="${S.tab === 'meter'}" class="${S.tab === 'meter' ? 'on' : ''}" data-act="tab" data-v="meter">① 전기 검침 (매월 10일)</button>
       <button role="tab" aria-selected="${S.tab === 'pay'}" class="${S.tab === 'pay' ? 'on' : ''}" data-act="tab" data-v="pay">② 임대료·관리비 납부현황</button></div>` + (S.hasData ? '' : `<div class="lockbar" role="note"><b>이전 기록이 아직 없습니다.</b><span>받은 parkville-data.js 파일을 한 번 불러오면 이름·임대료·지난 기록이 채워집니다.</span><button type="button" class="btn" data-act="import">기록 파일 불러오기</button></div>`) + lockBar() + `<div class="lockable">` + (S.tab === 'meter' ? viewMeter() : viewPay()) + `</div>`;
     if (locked()) app.querySelectorAll('.lockable input, .lockable .seg button').forEach((el) => { el.disabled = true; });
-    document.getElementById('savebtn').textContent = locked() ? '엑셀 파일 다시 저장' : '저장 (엑셀 기록 후 수정 잠금)';
+    document.getElementById('editbtn').disabled = !locked();
     renderPanel();
     persist();
   }
@@ -243,7 +243,7 @@
         <tr><td colspan="3" class="c">입금계좌 : ${h(S.cfg.bank)}</td></tr><tr><td colspan="3" class="c">예금주 : ${h(S.cfg.holder)}</td></tr>
         <tr><td colspan="3" class="c">납부 마감일 ${r.due}</td></tr><tr><td colspan="3" class="c">파크빌 관리사무실 &nbsp; 수납인</td></tr>
       </table>
-      <p class="hint">저장하면 엑셀의 「${ymShort(S.cur)} 영수증」 시트에 전 호실 영수증이 A4 한 장에 3장씩 들어갑니다.</p>
+      <p class="hint">저장하면 엑셀의 「${ymShort(S.cur)} 영수증」 시트에 전 호실 영수증이 A4 가로 한 장에 3장씩 들어갑니다.</p>
       <details class="rc-cfg"><summary>영수증 문구 고치기 (계좌·예금주·마감일)</summary>
         <label>입금계좌 <input class="in note" data-cfg="bank" value="${h(S.cfg.bank)}"></label><label>예금주 <input class="in note" data-cfg="holder" value="${h(S.cfg.holder)}"></label>
         <label>납부 마감일(매월) <input class="in" data-cfg="dueDay" inputmode="numeric" value="${h(S.cfg.dueDay)}"></label><label>안내 문구 <input class="in note" data-cfg="notice" value="${h(S.cfg.notice)}"></label></details>`;
@@ -293,7 +293,7 @@
     const { act, v, room, f } = b.dataset;
     if (b.tagName === 'A') e.preventDefault();
     if (act === 'pay') { if (locked()) return; const r = rec(S.cur, room); r[f] = r[f] === v ? '' : v; }
-    else if (act === 'unlock') { if (confirm(`${ymLong(S.cur)} ${TAB_NAME[S.tab]}의 잠금을 풀고 다시 수정할 수 있게 할까요?`)) month(S.cur).lock[S.tab] = false; else return; }
+    else if (act === 'unlock') { if (!locked()) return; month(S.cur).lock[S.tab] = false; toast(`${ymLong(S.cur)} ${TAB_NAME[S.tab]}을(를) 다시 수정할 수 있습니다. 고친 뒤 「저장」을 눌러 주세요.`); }
     else if (act === 'tab') S.tab = v;
     else if (act === 'month') S.cur = shift(S.cur, +v);
     else if (act === 'settle') settle(S.rooms.find((x) => x.id === room), v);
@@ -410,7 +410,8 @@
       wide(25, S.cfg.notice, ST.gray); wide(26, `입금계좌 : ${S.cfg.bank}`, ST.center); wide(27, `예금주 : ${S.cfg.holder}`, ST.center);
       wide(28, `납부 마감일 ${r.due}`, ST.center); wide(29, '파크빌 관리사무실      수납인', ST.center);
     });
-    return { name: `${ymShort(ym)} 영수증`, widths: [9, 14, 10.5, 2, 9, 14, 10.5, 2, 9, 14, 10.5], rowHeight: 25, fitWidth: true, rows, merges, breaks };
+    // A4 가로 한 장에 영수증 3장
+    return { name: `${ymShort(ym)} 영수증`, widths: [12, 19, 14, 3, 12, 19, 14, 3, 12, 19, 14], rowHeight: 17.5, fitWidth: true, landscape: true, rows, merges, breaks };
   }
   function monthlySheet(yms) {
     const rows = [[C('파크빌 월별 요약', ST.title)], [C('임대료·관리비는 그 달 표에 적힌 금액의 합계입니다.', ST.sub)],
@@ -435,7 +436,6 @@
   });
   async function saveExcel(forcePick) {
     const willLock = !forcePick && !locked();
-    if (willLock && !confirm(`저장하면 ${ymLong(S.cur)} ${TAB_NAME[S.tab]} 내용은 더 이상 수정할 수 없습니다.\n엑셀 파일에 저장할까요?`)) return;
     const bytes = buildWorkbook();
     const stamp = () => { if (willLock) { const m = month(S.cur); (m.lock || (m.lock = {}))[S.tab] = true; } S.savedAt = new Date().toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); };
     if (!window.showSaveFilePicker) { // 사파리 등: 다운로드 폴더로 내려받기
