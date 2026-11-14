@@ -25,6 +25,8 @@ button { cursor: pointer; }
 .btn:hover { background: var(--tint); }
 .btn.primary { background: #f0a020; border-color: #f0a020; color: #1b1300; } .btn.primary:hover { background: #ffb53d; }
 .btn:disabled { opacity: .45; cursor: default; } .saver .btn { margin-left: 6px; }
+#undobtn { background: #dfe3e8; border-color: #dfe3e8; color: #1b2733; } #undobtn:hover:not(:disabled) { background: #eef1f4; }
+#editbtn { background: #2f6fde; border-color: #2f6fde; color: #fff; } #editbtn:hover:not(:disabled) { background: #4a86ee; }
 .btn.xl { font-size: 1.25rem; padding: 16px 28px; width: 100%; }
 
 main { min-width: 0; padding: 16px 0 40px; }

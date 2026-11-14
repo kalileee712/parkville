@@ -16,6 +16,17 @@
   const FIRST_PAY_MONTH = '2026-11';
   const newMonth = (prev) => ({ kepco: null, fixedItems: JSON.parse(JSON.stringify(prev ? prev.fixedItems : FIXED_ITEMS)), r: {} });
 
+  // 자료 파일에 나중에 추가된 수정분(patches)을 이미 쓰고 있는 기록에도 한 번씩만 반영한다
+  function applyPatches(s, data) {
+    if (!data || !data.patches) return;
+    if (!s.applied) s.applied = [];
+    data.patches.forEach((p) => {
+      if (s.applied.includes(p.id)) return;
+      const m = s.months[p.ym] || (s.months[p.ym] = newMonth());
+      for (const id in p.usage || {}) (m.r[id] || (m.r[id] = {})).usage = p.usage[id];
+      s.applied.push(p.id);
+    });
+  }
   function seed(data = window.PARKVILLE_DATA || null) {
     const now = new Date(), thisYm = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
     const s = { rooms: JSON.parse(JSON.stringify(data ? data.rooms : BASE_ROOMS)), months: {}, cur: data ? FIRST_PAY_MONTH : thisYm, tab: 'meter', savedAt: null, fileName: null,
@@ -33,6 +44,7 @@
       for (const id in hist[ym].r) m.r[id] = { ...m.r[id], ...hist[ym].r[id] };
     }
     for (const ym in s.months) if (ym < FIRST_PAY_MONTH) s.months[ym].lock = { meter: true, pay: true };
+    applyPatches(s, data);
     return s;
   }
   const CFG = { bank: '', holder: '', dueDay: 25, notice: '월세는 매월입주일 기준 선불로 입금 요망함' };
@@ -41,6 +53,7 @@
   if (!S.cfg) S.cfg = { ...CFG };
   if (S.sel === undefined) S.sel = '201';
   if (S.hasData === undefined) S.hasData = true;
+  applyPatches(S, window.PARKVILLE_DATA);
   /* ---------- 되돌리기 ---------- */
   // 내용이 바뀔 때마다 바뀌기 전 상태를 쌓아 두었다가 「되돌리기」를 누르면 하나씩 되돌린다 (달·탭 이동은 제외)
   const dataJson = () => JSON.stringify({ rooms: S.rooms, cfg: S.cfg, months: Object.fromEntries(Object.entries(S.months).filter(([, m]) => Object.keys(m.r).length || m.kepco != null || m.common != null || m.lock)) });
