@@ -239,7 +239,41 @@
     if (locked()) app.querySelectorAll('.lockable input, .lockable .seg button').forEach((el) => { el.disabled = true; });
     document.getElementById('editbtn').disabled = !locked();
     renderPanel();
+    renderPolicy();
     persist();
+  }
+  // 화면 맨 아래 「요금 계산 기준」 — 지금 적용 중인 금액으로 보여 준다
+  function renderPolicy() {
+    const m = M(S.cur), items = m.fixedItems, mo = +S.cur.slice(5), pm = +shift(S.cur, -1).slice(5);
+    const f1 = byFloor(1).map((room) => `${room.label} ${won(calc(room).fixed) || 0}원`).join(' · ');
+    const chk = '<em class="chk">확인 필요</em>';
+    document.getElementById('policy').innerHTML = `<h2>요금 계산 기준 <small>${ymLong(S.cur)} 적용 기준</small></h2>
+      <div class="pol">
+        <section><h3>1. 임대료</h3><ul>
+          <li>호실마다 정해진 월 임대료를 받습니다. 금액은 납부현황 표에서 고칠 수 있고, 고친 달부터 이어집니다.</li>
+          <li>${h(S.cfg.notice)}</li></ul></section>
+        <section><h3>2. 관리비 = 고정비 + 사용료</h3><ul>
+          <li><b>2~5층 고정비 ${won(fixedSum(S.cur))}원</b> = ${items.map((x) => `${x[0]} ${won(x[1])}원`).join(' + ')}</li>
+          <li><b>1층은 일반관리비만 고정</b>이고 전기 기본요금·TV 수신료·인터넷 요금은 없습니다. (${f1})</li>
+          <li>사용료는 아래 3번의 전기 사용료입니다.</li></ul></section>
+        <section><h3>3. 전기 사용료</h3><ul>
+          <li>매월 10일에 검침합니다. 사용기간은 전월 10일 ~ 당월 9일입니다. (이번 달: ${pm}/10 ~ ${mo}/09)</li>
+          <li>호실별 사용량(kWh)을 넣습니다. 사용량 = 당월 검침 − 전월 검침.</li>
+          <li>한전에 전화해서 확인한 <b>전기요금 총액</b>을 넣으면 <b>호실 전기 사용료 = 총액 × (호실 사용량 ÷ 전체 사용량)</b> 으로 나눕니다.</li>
+          <li>「그중 공용 전기요금」을 넣으면 그 금액은 2~5층 ${METERED.length}개 호실에 똑같이 나눠 공동전기료로 받고, 나머지만 사용량대로 나눕니다. 비워 두면 총액 전체를 사용량대로 나눕니다. ${chk}</li>
+          <li>1층은 개별 계량기가 없어 사용료를 납부현황 표에 직접 넣습니다. ${chk}</li></ul></section>
+        <section><h3>4. 완납 / 미납과 가산료</h3><ul>
+          <li>임대료와 관리비를 각각 완납 또는 미납으로 표시합니다.</li>
+          <li><b>미납이면 다음 달에 ${LATE_RATE * 100}% 가산료</b>가 붙어 「전월 미납 + 가산료」 칸에 나타납니다.</li>
+          <li>전화해서 <b>기간 안에 받으면 완납으로 바꾸고 가산료는 없습니다</b> (「기간 내 받음」). 가산료까지 받았으면 「가산료 포함 받음」을 누르면 비고에 기록됩니다.</li>
+          <li>지금은 임대료 미납과 관리비 미납 모두에 가산료를 붙입니다. ${chk}</li></ul></section>
+        <section><h3>5. 납부영수증</h3><ul>
+          <li>일반관리비 소계, 전기요금(기본 요금·사용량·사용 요금·공동전기료·TV수신료) 소계, 통신요금(인터넷.유선요금), 당월 요금 합계 순서로 찍힙니다.</li>
+          <li>미납금액 = 이전 달 미납 관리비 + 가산료 ${LATE_RATE * 100}% · 납기내금액 = 당월 요금 합계 + 미납금액</li>
+          <li>연체료(${LATE_RATE * 100}%) = 당월 요금 합계의 ${LATE_RATE * 100}% · 납기후금액 = 납기내금액 + 연체료 ${chk}</li>
+          <li>납부 마감일은 매월 ${h(S.cfg.dueDay)}일입니다. 영수증은 엑셀에서 A4 가로 한 장에 3장씩 인쇄됩니다.</li></ul></section>
+      </div>
+      <p class="hint">「확인 필요」 표시는 임시로 정해 둔 기준입니다. 실제와 다르면 알려 주세요.</p>`;
   }
   // 오른쪽 영수증 미리보기
   const panel = document.getElementById('panel');
