@@ -41,7 +41,24 @@
   if (!S.cfg) S.cfg = { ...CFG };
   if (S.sel === undefined) S.sel = '201';
   if (S.hasData === undefined) S.hasData = true;
-  const persist = () => { if (TEST) return; try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) { } };
+  /* ---------- 되돌리기 ---------- */
+  // 내용이 바뀔 때마다 바뀌기 전 상태를 쌓아 두었다가 「되돌리기」를 누르면 하나씩 되돌린다 (달·탭 이동은 제외)
+  const dataJson = () => JSON.stringify({ rooms: S.rooms, cfg: S.cfg, months: Object.fromEntries(Object.entries(S.months).filter(([, m]) => Object.keys(m.r).length || m.kepco != null || m.common != null || m.lock)) });
+  const undoStack = [];
+  let lastJson = dataJson(), lastView = { cur: S.cur, tab: S.tab };
+  function track() {
+    const now = dataJson();
+    if (now !== lastJson) { undoStack.push({ json: lastJson, ...lastView }); if (undoStack.length > 50) undoStack.shift(); lastJson = now; }
+    lastView = { cur: S.cur, tab: S.tab };
+    const b = document.getElementById('undobtn'); if (b) b.disabled = !undoStack.length;
+  }
+  function undo() {
+    const u = undoStack.pop(); if (!u) return;
+    const d = JSON.parse(u.json);
+    S.rooms = d.rooms; S.cfg = d.cfg; S.months = d.months; S.cur = u.cur; S.tab = u.tab; lastJson = u.json;
+    render(); toast('바로 전 상태로 되돌렸습니다.');
+  }
+  const persist = () => { track(); if (TEST) return; try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) { } };
 
   /* ---------- 계산 ---------- */
   const shift = (ym, d) => { let [y, m] = ym.split('-').map(Number); m += d; while (m < 1) { m += 12; y--; } while (m > 12) { m -= 12; y++; } return y + '-' + String(m).padStart(2, '0'); };
@@ -297,6 +314,7 @@
     else if (act === 'tab') S.tab = v;
     else if (act === 'month') S.cur = shift(S.cur, +v);
     else if (act === 'settle') settle(S.rooms.find((x) => x.id === room), v);
+    else if (act === 'undo') return undo();
     else if (act === 'import') return document.getElementById('datafile').click();
     else if (act === 'save') return saveExcel(false);
     else if (act === 'pickfile') return saveExcel(true);
@@ -468,6 +486,7 @@
     if (mode) month('2026-11').kepco = 3200000;
     if (mode === 'meter') S.tab = 'meter';
     if (mode === 'hist') S.cur = '2025-03';
+    if (mode === 'undo') { render(); const a = peek('2026-11', '201').read; rec('2026-11', '201').read = 99999; rec('2026-11', '202').rentPaid = 'N'; render(); const b = peek('2026-11', '201').read; S.cur = '2026-12'; render(); undo(); document.body.dataset.undo = [a, b, peek('2026-11', '201').read, peek('2026-11', '202').rentPaid || '-', S.cur, undoStack.length].join('|'); }
     if (mode === 'rc') { month('2026-11').common = 132550; S.sel = '205'; }
     if (mode.startsWith('dec')) { S.cur = '2026-12'; S.tab = 'meter'; Object.assign(rec('2026-12', '201'), { usage: 150, read: 50378 }); rec('2026-12', '202').read = 38400; month('2026-12').lock = { meter: mode === 'decL' }; }
     if (mode === 'late' || mode === 'settle') {
