@@ -237,7 +237,7 @@
   function render() {
     month(S.cur);
     document.getElementById('ym').textContent = ymLong(S.cur);
-    document.getElementById('saved').textContent = S.savedAt ? `마지막 저장 ${S.savedAt}` : '아직 엑셀에 저장하지 않았습니다';
+    document.getElementById('saved').textContent = S.savedAt ? `마지막 저장 ${S.savedAt}${S.fileName ? ' → ' + S.fileName : ''}` : '아직 엑셀에 저장하지 않았습니다';
     app.innerHTML = kpis() + `<div class="tabs" role="tablist">
       <button role="tab" aria-selected="${S.tab === 'meter'}" class="${S.tab === 'meter' ? 'on' : ''}" data-act="tab" data-v="meter">① 전기 검침 (매월 10일)</button>
       <button role="tab" aria-selected="${S.tab === 'pay'}" class="${S.tab === 'pay' ? 'on' : ''}" data-act="tab" data-v="pay">② 임대료·관리비 납부현황</button><a class="tablink" href="#policy" data-act="gopolicy">요금 계산 기준 보기 ↓</a></div>` + (S.hasData ? '' : `<div class="lockbar" role="note"><b>이전 기록이 아직 없습니다.</b><span>받은 parkville-data.js 파일을 한 번 불러오면 이름·임대료·지난 기록이 채워집니다.</span><button type="button" class="btn" data-act="import">기록 파일 불러오기</button></div>`) + lockBar() + `<div class="lockable">` + (S.tab === 'meter' ? viewMeter() : viewPay()) + `</div>`;
@@ -392,8 +392,13 @@
       const n = num(el.value), prev = peek(shift(S.cur, -1), el.dataset.room).read;
       if (n == null) delete r.usage; else { r.usage = n; if (prev != null) r.read = prev + n; }
     }
-    else if (f === 'fee') { const n = num(el.value); if (n == null) delete r.fee; else r.fee = n; }
-    else if (f === 'rent' || f === 'fixed') { const n = num(el.value); if (n != null) r[f] = n; }
+    else if (f === 'fee') {
+      const n = num(el.value);
+      // 이전 파일에서 옮긴 달은 관리비 총액으로 들어 있으므로, 사용료를 고치면 총액을 함께 고친다
+      if (r.mgmtAmt != null) r.mgmtAmt = calc(S.rooms.find((x) => x.id === el.dataset.room)).fixed + (n || 0);
+      else if (n == null) delete r.fee; else r.fee = n;
+    }
+    else if (f === 'rent' || f === 'fixed') { const n = num(el.value); if (n != null) { r[f] = n; if (f === 'fixed') delete r.mgmtAmt; } }
     rerender();
   });
   let fixedOpen = false; // 고정비 내역을 고치는 동안에는 접히지 않게
@@ -527,12 +532,16 @@
       }
       if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return toast('파일 저장 권한을 허용해야 저장할 수 있습니다.', true);
       const w = await handle.createWritable(); await w.write(bytes); await w.close();
+      // 정말 써졌는지 파일을 다시 읽어 크기를 확인한다
+      const written = await handle.getFile();
+      if (written.size !== bytes.length) throw new Error('size mismatch');
       S.fileName = handle.name; stamp(); render();
-      toast(`${handle.name} 파일에 저장했습니다.`);
+      toast(`${handle.name} 파일에 저장했습니다. (${new Date(written.lastModified).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})`);
     } catch (err) {
       if (err.name === 'AbortError') return;
       if (err.name === 'NotFoundError' && !forcePick) { await idb('readwrite', (s) => s.delete('file')).catch(() => { }); return saveExcel(true); }
-      toast('저장하지 못했습니다. 엑셀에서 그 파일을 열어 두었다면 닫고 다시 눌러 주세요.', true);
+      toast('저장하지 못했습니다.', true);
+      alert('엑셀 파일에 저장하지 못했습니다.\n\n엑셀에서 그 파일을 열어 두었다면 먼저 닫고, 다시 「저장」을 눌러 주세요.\n(화면에 입력한 내용은 그대로 남아 있습니다)');
     }
   }
 
