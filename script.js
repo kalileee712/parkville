@@ -176,7 +176,7 @@
       byFloor(f).forEach((room) => {
         const c = calc(room); alloc += c.autoFee || 0;
         const name = `<th scope="row">${room.label}</th><td>${inp(room.id, 'tenant', c.tenant, { text: 1, cls: 'note', ph: '이름(공실이면 비움)', label: room.label + ' 입주자 이름' })}</td>`;
-        if (!c.metered) { rows += `<tr data-row="${room.id}">${name}<td colspan="4" class="muted c">개별 계량기 없음 — 사용료는 납부현황에서 직접 입력</td></tr>`; return; }
+        if (!c.metered) { rows += `<tr data-row="${room.id}">${name}<td colspan="4" class="muted c">상가 — 전기요금은 입주자가 직접 납부 (입력할 것 없음)</td></tr>`; return; }
         rows += `<tr data-row="${room.id}">${name}<td class="n">${won(c.prev)}</td>
           <td>${inp(room.id, 'read', c.read, { label: room.label + ' 당월 검침' })}</td><td>${inp(room.id, 'usage', c.usage, { cls: 'big' + (c.bad ? ' bad' : ''), ph: '사용량', label: room.label + ' 사용량 kWh' })}</td><td class="n strong">${c.autoFee == null ? '<span class="muted">–</span>' : won(c.autoFee)}</td></tr>`;
       });
@@ -205,7 +205,7 @@
         rows += `<tr data-row="${room.id}" class="${c.rentPaid === 'N' || c.mgmtPaid === 'N' || a.principal ? 'row-bad' : ''}"><th scope="row">${room.label}<small>${h(c.tenant) || '공실'}</small></th>
           <td>${inp(room.id, 'rent', c.rent, { label: room.label + ' 임대료' })}</td><td class="c">${seg(room.id, 'rentPaid', c.rentPaid)}</td>
           <td>${c.metered ? `<span class="fixed" title="${h(m.fixedItems.map((x) => x[0] + ' ' + won(x[1])).join(' + '))}">${won(c.fixed)}</span>` : inp(room.id, 'fixed', c.fixed, { label: room.label + ' 고정 관리비' })}</td>
-          <td>${inp(room.id, 'fee', c.fee, { ph: c.metered ? '검침·한전요금 입력 후 자동' : '직접 입력', cls: c.feeManual ? 'manual' : '', label: room.label + ' 사용료' })}</td>
+          <td>${c.metered ? inp(room.id, 'fee', c.fee, { ph: '검침·한전요금 입력 후 자동', cls: c.feeManual ? 'manual' : '', label: room.label + ' 사용료' }) : '<span class="fixed muted" title="1층 상가는 전기요금을 직접 납부합니다">–</span>'}</td>
           <td class="n strong">${won(c.mgmt)}</td><td class="c">${seg(room.id, 'mgmtPaid', c.mgmtPaid)}</td>
           <td class="arr-cell">${arr}</td>
           <td>${inp(room.id, 'note', c.note, { text: 1, cls: 'note', label: room.label + ' 비고' })}</td></tr>`;
@@ -235,7 +235,7 @@
     document.getElementById('saved').textContent = S.savedAt ? `마지막 저장 ${S.savedAt}` : '아직 엑셀에 저장하지 않았습니다';
     app.innerHTML = kpis() + `<div class="tabs" role="tablist">
       <button role="tab" aria-selected="${S.tab === 'meter'}" class="${S.tab === 'meter' ? 'on' : ''}" data-act="tab" data-v="meter">① 전기 검침 (매월 10일)</button>
-      <button role="tab" aria-selected="${S.tab === 'pay'}" class="${S.tab === 'pay' ? 'on' : ''}" data-act="tab" data-v="pay">② 임대료·관리비 납부현황</button></div>` + (S.hasData ? '' : `<div class="lockbar" role="note"><b>이전 기록이 아직 없습니다.</b><span>받은 parkville-data.js 파일을 한 번 불러오면 이름·임대료·지난 기록이 채워집니다.</span><button type="button" class="btn" data-act="import">기록 파일 불러오기</button></div>`) + lockBar() + `<div class="lockable">` + (S.tab === 'meter' ? viewMeter() : viewPay()) + `</div>`;
+      <button role="tab" aria-selected="${S.tab === 'pay'}" class="${S.tab === 'pay' ? 'on' : ''}" data-act="tab" data-v="pay">② 임대료·관리비 납부현황</button><a class="tablink" href="#policy" data-act="gopolicy">요금 계산 기준 보기 ↓</a></div>` + (S.hasData ? '' : `<div class="lockbar" role="note"><b>이전 기록이 아직 없습니다.</b><span>받은 parkville-data.js 파일을 한 번 불러오면 이름·임대료·지난 기록이 채워집니다.</span><button type="button" class="btn" data-act="import">기록 파일 불러오기</button></div>`) + lockBar() + `<div class="lockable">` + (S.tab === 'meter' ? viewMeter() : viewPay()) + `</div>`;
     if (locked()) app.querySelectorAll('.lockable input, .lockable .seg button').forEach((el) => { el.disabled = true; });
     document.getElementById('editbtn').disabled = !locked();
     renderPanel();
@@ -247,7 +247,8 @@
     const m = M(S.cur), items = m.fixedItems, mo = +S.cur.slice(5), pm = +shift(S.cur, -1).slice(5);
     const f1 = byFloor(1).map((room) => `${room.label} ${won(calc(room).fixed) || 0}원`).join(' · ');
     const chk = '<em class="chk">확인 필요</em>';
-    document.getElementById('policy').innerHTML = `<h2>요금 계산 기준 <small>${ymLong(S.cur)} 적용 기준</small></h2>
+    const box = document.getElementById('policy'); if (!box) return;
+    box.innerHTML = `<h2>요금 계산 기준 <small>${ymLong(S.cur)} 적용 기준</small></h2>
       <div class="pol">
         <section><h3>1. 임대료</h3><ul>
           <li>호실마다 정해진 월 임대료를 받습니다. 금액은 납부현황 표에서 고칠 수 있고, 고친 달부터 이어집니다.</li>
@@ -261,19 +262,19 @@
           <li>호실별 사용량(kWh)을 넣습니다. 사용량 = 당월 검침 − 전월 검침.</li>
           <li>한전에 전화해서 확인한 <b>전기요금 총액</b>을 넣으면 <b>호실 전기 사용료 = 총액 × (호실 사용량 ÷ 전체 사용량)</b> 으로 나눕니다.</li>
           <li>「그중 공용 전기요금」을 넣으면 그 금액은 2~5층 ${METERED.length}개 호실에 똑같이 나눠 공동전기료로 받고, 나머지만 사용량대로 나눕니다. 비워 두면 총액 전체를 사용량대로 나눕니다. ${chk}</li>
-          <li>1층은 개별 계량기가 없어 사용료를 납부현황 표에 직접 넣습니다. ${chk}</li></ul></section>
+          <li><b>1층은 상가</b>라서 전기요금을 입주자가 직접 냅니다. 검침·사용료를 입력하지 않습니다.</li></ul></section>
         <section><h3>4. 완납 / 미납과 가산료</h3><ul>
           <li>임대료와 관리비를 각각 완납 또는 미납으로 표시합니다.</li>
-          <li><b>미납이면 다음 달에 ${LATE_RATE * 100}% 가산료</b>가 붙어 「전월 미납 + 가산료」 칸에 나타납니다.</li>
+          <li><b>납부 마감일(매월 ${h(S.cfg.dueDay)}일)까지 내지 않으면 연체료 ${LATE_RATE * 100}%</b>가 붙습니다. 미납으로 표시하면 다음 달 「전월 미납 + 가산료」 칸에 나타납니다.</li>
           <li>전화해서 <b>기간 안에 받으면 완납으로 바꾸고 가산료는 없습니다</b> (「기간 내 받음」). 가산료까지 받았으면 「가산료 포함 받음」을 누르면 비고에 기록됩니다.</li>
-          <li>지금은 임대료 미납과 관리비 미납 모두에 가산료를 붙입니다. ${chk}</li></ul></section>
+          <li>임대료 미납과 관리비 미납 모두에 붙습니다.</li></ul></section>
         <section><h3>5. 납부영수증</h3><ul>
           <li>일반관리비 소계, 전기요금(기본 요금·사용량·사용 요금·공동전기료·TV수신료) 소계, 통신요금(인터넷.유선요금), 당월 요금 합계 순서로 찍힙니다.</li>
           <li>미납금액 = 이전 달 미납 관리비 + 가산료 ${LATE_RATE * 100}% · 납기내금액 = 당월 요금 합계 + 미납금액</li>
-          <li>연체료(${LATE_RATE * 100}%) = 당월 요금 합계의 ${LATE_RATE * 100}% · 납기후금액 = 납기내금액 + 연체료 ${chk}</li>
+          <li>연체료(${LATE_RATE * 100}%) = 당월 요금 합계의 ${LATE_RATE * 100}% · 납기후금액 = 납기내금액 + 연체료</li>
           <li>납부 마감일은 매월 ${h(S.cfg.dueDay)}일입니다. 영수증은 엑셀에서 A4 가로 한 장에 3장씩 인쇄됩니다.</li></ul></section>
       </div>
-      <p class="hint">「확인 필요」 표시는 임시로 정해 둔 기준입니다. 실제와 다르면 알려 주세요.</p>`;
+      <p class="hint">「확인 필요」 표시는 임시로 정해 둔 기준입니다.</p>`;
   }
   // 오른쪽 영수증 미리보기
   const panel = document.getElementById('panel');
@@ -362,6 +363,7 @@
     else if (act === 'month') S.cur = shift(S.cur, +v);
     else if (act === 'settle') settle(S.rooms.find((x) => x.id === room), v);
     else if (act === 'undo') return undo();
+    else if (act === 'gopolicy') return document.getElementById('policy').scrollIntoView({ behavior: 'smooth' });
     else if (act === 'import') return document.getElementById('datafile').click();
     else if (act === 'save') return saveExcel(false);
     else if (act === 'pickfile') return saveExcel(true);

@@ -106,6 +106,8 @@ main { min-width: 0; padding: 16px 0 40px; }
 .in:disabled { background: #f1f3f5; color: var(--ink); border-color: var(--line2); opacity: 1; -webkit-text-fill-color: var(--ink); }
 .seg button:disabled { cursor: default; } .seg button:disabled:not(.on) { color: #b5bdc6; background: #f6f7f9; }
 .in.bad { border-color: var(--no); color: var(--no); }
+.tablink { margin-left: auto; align-self: center; font-weight: 700; color: var(--navy); background: #fff; border: 1px solid var(--navy); border-radius: 999px; padding: 6px 14px; text-decoration: none; font-size: .88rem; } .tablink:hover { background: var(--tint); }
+#policy { scroll-margin-top: 90px; }
 #policy { max-width: 1640px; margin: 0 auto 24px; padding: 0 24px; }
 #policy h2 { font-size: 1.2rem; margin: 0 0 10px; border-top: 2px solid var(--navy); padding-top: 18px; } #policy h2 small { font-weight: 400; color: var(--sub); font-size: .8rem; margin-left: 8px; }
 .pol { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; }
