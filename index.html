@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>파크빌 관리</title>
+<link rel="stylesheet" href="style.css">
+<meta name="robots" content="noindex">
+<style>
+.gated .top, .gated .layout, .gated .foot { display: none; }
+#gate { max-width: 340px; margin: 16vh auto 0; background: #fff; border: 1px solid #d5dbe2; border-radius: 12px; padding: 28px; display: grid; gap: 10px; }
+#gate[hidden] { display: none; } #gate h1 { margin: 0 0 8px; font-size: 1.4rem; text-align: center; }
+#gate input { font-size: 1.2rem; padding: 10px 12px; border: 1px solid #9aa5b1; border-radius: 8px; }
+#gate button { font-size: 1.1rem; padding: 12px; } #gate-msg { margin: 0; min-height: 1.4em; text-align: center; color: #5b6875; } #gate-msg.bad { color: #c62828; font-weight: 700; }
+</style>
+</head>
+<body class="gated">
+<header class="top">
+  <div class="brand"><h1>파크빌 관리</h1><span>전기검침 · 임대료 · 관리비</span></div>
+  <div class="monthnav" aria-label="월 선택">
+    <button data-act="month" data-v="-1" aria-label="이전 달">◀</button>
+    <strong id="ym"></strong>
+    <button data-act="month" data-v="1" aria-label="다음 달">▶</button>
+  </div>
+  <div class="saver">
+    <button class="btn primary" id="savebtn" data-act="save">저장</button>
+    <small><span id="saved"></span> · <a href="#" data-act="pickfile">저장 파일 바꾸기</a></small>
+  </div>
+</header>
+
+
+<div class="layout">
+<main id="app"></main>
+<aside id="panel" aria-label="납부영수증 미리보기"></aside>
+</div>
+
+<footer class="foot">
+  <span>입력 내용은 이 컴퓨터의 브라우저에 자동으로 보관되고, 「엑셀 파일에 저장」을 누르면 엑셀 파일로 기록됩니다.</span>
+  <a href="#" data-act="import">기록 파일 불러오기</a> · <a href="#" data-act="reset">처음 상태로 되돌리기</a>
+</footer>
+<input type="file" id="datafile" accept=".js,.json" hidden>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<form id="gate" hidden autocomplete="off">
+  <h1>파크빌 관리</h1>
+  <label for="gate-pw">비밀번호</label>
+  <input id="gate-pw" type="password" autocomplete="current-password">
+  <button id="gate-btn" class="btn primary" type="submit">들어가기</button>
+  <p id="gate-msg" role="status"></p>
+</form>
+<script src="gate.js"></script>
+</body>
+</html>
