@@ -479,7 +479,7 @@
     try {
       if (!forcePick) handle = await idb('readonly', (s) => s.get('file')).catch(() => null);
       if (!handle) {
-        handle = await window.showSaveFilePicker({ suggestedName: FILE_NAME, types: [{ description: '엑셀 파일', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+        handle = await window.showSaveFilePicker({ id: 'parkville', startIn: 'desktop', suggestedName: FILE_NAME, types: [{ description: '엑셀 파일', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
         await idb('readwrite', (s) => s.put(handle, 'file')).catch(() => { });
       }
       if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return toast('파일 저장 권한을 허용해야 저장할 수 있습니다.', true);
