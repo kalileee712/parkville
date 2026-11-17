@@ -196,7 +196,7 @@
     const tot = totalUsage(S.cur), ks = kepcoSum(S.cur), bl = bill(S.cur), ce = commonEach(S.cur);
     const unitOf = (f) => { const k = floorBill(S.cur, f), u = floorUsage(S.cur, f); return k && u > 0 ? (k.pool / u).toLocaleString('ko-KR', { maximumFractionDigits: 1 }) : null; };
     let rows = '', alloc = 0;
-    const fixedElec = [2, 3, 4, 5].reduce((t, f) => { const k = floorBill(S.cur, f); return t + (k ? (k.baseEach + k.tvEach) * k.n : 0); }, 0);
+    const fixedElec = [2, 3, 4, 5].reduce((t, f) => { const k = floorBill(S.cur, f); return t + (k ? k.baseEach * k.n + k.tvEach * k.occ : 0); }, 0);
     FLOORS.forEach((f) => {
       const k = floorBill(S.cur, f), info = f === 1 ? '' : `<span class="fl-info">${k ? `사용량으로 나누는 금액 <b>${won(k.pool)}원</b>` : '한전 청구서 <b>아직 없음</b>'} · 사용량 ${won(floorUsage(S.cur, f)) || 0} kWh${unitOf(f) ? ` · 1kWh당 ${unitOf(f)}원` : ''}</span>`;
       rows += `<tr class="floor"><td colspan="6">${f}층${info}</td></tr>`;
