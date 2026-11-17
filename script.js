@@ -14,6 +14,11 @@
     .map(([id, floor, label]) => ({ id, floor, rent: 0, tenant: '', label: label || id + '호', fixed: 0 }));
   const METERED = BASE_ROOMS.filter((r) => r.floor > 1).map((r) => r.id);
   const FIRST_PAY_MONTH = '2026-11';
+  // 한전 청구서(팩스)에 찍힌 금액. 달마다 공용 청구금액과 층별 [청구금액, 기본요금, TV수신료]를 적는다.
+  // 여기에 적으면 화면에서 따로 입력하지 않아도 호실별 요금이 바로 계산된다.
+  const KEPCO_BILLS = {
+    '2026-11': { common: 140690, floors: { 2: [287450, 154000, 10000], 3: [299590, 154000, 17500], 4: [319190, 154000, 17500], 5: [288290, 154000, 17500] } },
+  };
   const newMonth = (prev) => ({ kepco: null, fixedItems: JSON.parse(JSON.stringify(prev ? prev.fixedItems : FIXED_ITEMS)), r: {} });
 
   // 자료 파일에 나중에 추가된 수정분(patches)을 이미 쓰고 있는 기록에도 한 번씩만 반영한다
@@ -94,22 +99,33 @@
   // 사용량: 직접 넣은 값이 있으면 그 값, 없으면 당월 검침 − 전월 검침
   const usageOf = (room, ym) => { const c = peek(ym, room.id), a = c.read, b = peek(shift(ym, -1), room.id).read; return room.floor <= 1 ? null : c.usage != null ? c.usage : a != null && b != null ? a - b : null; };
   const floorUsage = (ym, f) => byFloor(f).reduce((s, r) => { const u = usageOf(r, ym); return s + (u > 0 ? u : 0); }, 0);
-  const floorKepco = (ym, f) => { const k = M(ym).kepcoF; return k && k[f] != null ? k[f] : null; };
-  // 그 달 한전 요금 합계: 층별 요금 + 공용 (이전 기록은 총액만 있음)
-  const kepcoSum = (ym) => { const m = M(ym), fs = [2, 3, 4, 5].map((f) => floorKepco(ym, f)).filter((v) => v != null); return fs.length ? fs.reduce((a, b) => a + b, 0) + (m.common || 0) : m.kepco; };
+  const bill = (ym) => KEPCO_BILLS[ym] || null;
+  // 층 청구서: 기본요금·TV수신료는 그 층 호실 수로 똑같이 나누고(고정), 나머지(pool)는 사용량으로 나눈다
+  const floorBill = (ym, f) => {
+    const b = bill(ym), v = b && b.floors[f]; if (!v) return null;
+    const n = byFloor(f).length || 1;
+    return { total: v[0], base: v[1], tv: v[2], pool: v[0] - v[1] - v[2], baseEach: Math.round(v[1] / n), tvEach: Math.round(v[2] / n), n };
+  };
+  const commonEach = (ym) => { const b = bill(ym); return b && b.common != null ? Math.round(b.common / METERED.length) : null; };
+  // 그 달 한전 요금 합계: 층별 청구금액 + 공용 (이전 기록은 총액만 있음)
+  const kepcoSum = (ym) => { const b = bill(ym); return b ? Object.values(b.floors).reduce((a, v) => a + v[0], 0) + (b.common || 0) : M(ym).kepco; };
   const totalUsage = (ym) => S.rooms.reduce((s, r) => { const u = usageOf(r, ym); return s + (u > 0 ? u : 0); }, 0);
-  const fixedSum = (ym) => M(ym).fixedItems.reduce((s, x) => s + (x[1] || 0), 0);
+  // 고정비 내역. 한전 청구서가 있는 달은 전기 기본요금·TV 수신료를 청구서 금액 ÷ 호실 수로 바꾼다
+  const fixedItemsOf = (ym, f) => { const it = M(ym).fixedItems.map((x) => x.slice()), b = floorBill(ym, f); if (b) { it[1][1] = b.baseEach; it[2][1] = b.tvEach; } return it; };
+  const fixedSum = (ym, f) => fixedItemsOf(ym, f).reduce((s, x) => s + (x[1] || 0), 0);
+  // "2층 94,929원 / 3·4·5층 96,000원" 처럼 층별 고정비를 글로
+  const fixedText = (ym) => { const g = new Map(); [2, 3, 4, 5].forEach((f) => { const s = fixedSum(ym, f); g.set(s, [...(g.get(s) || []), f]); }); return [...g].map(([s, fs]) => `${g.size > 1 ? fs.join('·') + '층 ' : ''}${won(s)}원`).join(' / '); };
 
   function calc(room, ym = S.cur) {
     const c = peek(ym, room.id), metered = room.floor > 1;
-    const usage = usageOf(room, ym), tot = metered ? floorUsage(ym, room.floor) : 0, kepco = floorKepco(ym, room.floor);
-    // 전기 사용료 = 그 층 한전 요금 × (이 호실 사용량 ÷ 그 층 전체 사용량) + 공동전기료
+    const usage = usageOf(room, ym), tot = metered ? floorUsage(ym, room.floor) : 0, fb = metered ? floorBill(ym, room.floor) : null;
+    // 전기 사용료 = (그 층 청구금액 − 기본요금 − TV수신료) × (이 호실 사용량 ÷ 그 층 전체 사용량) + 공동전기료
     // 공용 전기요금은 건물 전체 1건 — 2~5층 호실 수로 똑같이 나눈다(공동전기료)
-    const common = M(ym).common, commonShare = metered && common != null ? Math.round(common / METERED.length) : null;
-    const autoFee = metered && usage != null && usage >= 0 && kepco != null && tot > 0 ? Math.round((kepco * usage) / tot) + (commonShare || 0) : null;
+    const commonShare = metered ? commonEach(ym) : null;
+    const autoFee = fb && usage != null && usage >= 0 && tot > 0 ? Math.round((fb.pool * usage) / tot) + (commonShare || 0) : null;
     let fee = c.fee != null ? c.fee : autoFee;
     const rent = inherit(room, ym, 'rent');
-    let fixed = metered ? fixedSum(ym) : inherit(room, ym, 'fixed');
+    let fixed = metered ? fixedSum(ym, room.floor) : inherit(room, ym, 'fixed');
     if (c.mgmtAmt != null) { fixed = Math.min(fixed, c.mgmtAmt); fee = c.mgmtAmt - fixed; } // 이전 파일에서 옮긴 관리비 총액
     return { commonShare, prev: peek(shift(ym, -1), room.id).read, read: c.read, usage, autoFee, fee, feeManual: c.fee != null, rent, fixed, mgmt: fixed + (fee || 0), tenant: inherit(room, ym, 'tenant') || '', rentPaid: c.rentPaid || '', mgmtPaid: c.mgmtPaid || '', note: c.note || '', metered, bad: usage != null && usage < 0 };
   }
@@ -126,8 +142,8 @@
   }
   // 납부영수증 한 장에 들어갈 숫자
   function receipt(room, ym = S.cur) {
-    const c = calc(room, ym), m = M(ym), it = m.fixedItems, [y, mo] = ym.split('-').map(Number), p = shift(ym, -1);
-    const split = c.metered && c.fixed === fixedSum(ym);
+    const c = calc(room, ym), it = fixedItemsOf(ym, room.floor), [y, mo] = ym.split('-').map(Number), p = shift(ym, -1);
+    const split = c.metered && c.fixed === fixedSum(ym, room.floor);
     const general = split ? it[0][1] : c.fixed, base = split ? it[1][1] : null, tv = split ? it[2][1] : null, net = split ? it[3][1] : null;
     const fee = c.fee || 0, common = c.metered && c.commonShare && fee ? Math.min(c.commonShare, fee) : 0, use = fee - common;
     const un = arrears(room, ym).items.filter((x) => x.f === 'mgmtPaid'), prin = un.reduce((s, x) => s + x.amt, 0), unpaid = prin + Math.round(prin * LATE_RATE);
@@ -173,11 +189,12 @@
   }
 
   function viewMeter() {
-    const m = month(S.cur), tot = totalUsage(S.cur), ks = kepcoSum(S.cur);
-    const unitOf = (f) => { const k = floorKepco(S.cur, f), u = floorUsage(S.cur, f); return k != null && u > 0 ? (k / u).toLocaleString('ko-KR', { maximumFractionDigits: 1 }) : null; };
+    month(S.cur);
+    const tot = totalUsage(S.cur), ks = kepcoSum(S.cur), bl = bill(S.cur), ce = commonEach(S.cur);
+    const unitOf = (f) => { const k = floorBill(S.cur, f), u = floorUsage(S.cur, f); return k && u > 0 ? (k.pool / u).toLocaleString('ko-KR', { maximumFractionDigits: 1 }) : null; };
     let rows = '', alloc = 0;
     FLOORS.forEach((f) => {
-      const k = floorKepco(S.cur, f), info = f === 1 ? '' : `<span class="fl-info">한전 요금 <b>${k != null ? won(k) + '원' : '미입력'}</b> · 사용량 ${won(floorUsage(S.cur, f)) || 0} kWh${unitOf(f) ? ` · 1kWh당 ${unitOf(f)}원` : ''}</span>`;
+      const k = floorBill(S.cur, f), info = f === 1 ? '' : `<span class="fl-info">${k ? `사용량으로 나누는 금액 <b>${won(k.pool)}원</b>` : '한전 청구서 <b>아직 없음</b>'} · 사용량 ${won(floorUsage(S.cur, f)) || 0} kWh${unitOf(f) ? ` · 1kWh당 ${unitOf(f)}원` : ''}</span>`;
       rows += `<tr class="floor"><td colspan="6">${f}층${info}</td></tr>`;
       byFloor(f).forEach((room) => {
         const c = calc(room); alloc += c.autoFee || 0;
@@ -187,15 +204,18 @@
           <td>${inp(room.id, 'read', c.read, { label: room.label + ' 당월 검침' })}</td><td>${inp(room.id, 'usage', c.usage, { cls: 'big' + (c.bad ? ' bad' : ''), ph: '사용량', label: room.label + ' 사용량 kWh' })}</td><td class="n strong">${c.autoFee == null ? '<span class="muted">–</span>' : won(c.autoFee)}</td></tr>`;
       });
     });
+    const billBox = bl ? `<div class="ktitle"><b>한전 전기요금 청구서 (${ymLong(S.cur)}분)</b><small>한전에서 받은 청구서 금액입니다. 따로 입력할 것이 없습니다.</small></div>
+        <table class="bill"><thead><tr><th>구분</th><th>청구금액</th><th>기본요금</th><th>TV수신료</th><th>사용량으로 나누는 금액</th><th>호실당 기본요금</th><th>호실당 TV수신료</th></tr></thead><tbody>
+        ${[2, 3, 4, 5].map((f) => { const k = floorBill(S.cur, f); return k ? `<tr><th>${f}층</th><td><b>${won(k.total)}</b></td><td>${won(k.base)}</td><td>${won(k.tv)}</td><td><b>${won(k.pool)}</b></td><td>${won(k.baseEach)}</td><td>${won(k.tvEach)}</td></tr>` : ''; }).join('')}
+        <tr><th>공용</th><td><b>${won(bl.common)}</b></td><td colspan="5" class="l">${METERED.length}개 호실에 똑같이 나눔 → 호실당 공동전기료 <b>${won(ce)}원</b></td></tr></tbody></table>`
+      : `<div class="ktitle"><b>한전 전기요금 청구서</b><small>${S.cur >= FIRST_PAY_MONTH ? `${ymLong(S.cur)}분 청구서가 아직 반영되지 않았습니다. 청구서가 반영되면 전기 사용료가 자동으로 계산됩니다.` : '이전 관리 파일에서 옮긴 기록입니다.'}</small></div>`;
     return `<div class="sheet"><div class="kepco">
-        <div class="ktitle"><b>한전 전기요금 (층별)</b><small>한전에 전화해서 확인한 이번 달 요금을 층마다 넣습니다</small></div>
-        ${[2, 3, 4, 5].map((f) => `<label class="kf">${f}층 <input class="in big" type="text" inputmode="numeric" data-f="kepcoF" data-floor="${f}" data-k="kepcoF|${f}" value="${won(floorKepco(S.cur, f))}" placeholder="${f}층 요금" autocomplete="off" aria-label="${f}층 한전 전기요금"> 원</label>`).join('')}
-        <label class="kf common">공용 <input id="common" class="in big" type="text" inputmode="numeric" data-f="common" data-k="common" value="${won(m.common)}" placeholder="공용 요금" autocomplete="off" aria-label="공용 전기요금"> 원<small>건물 전체 1건 — ${METERED.length}개 호실에 똑같이 나눠 「공동전기료」로</small></label>
+        ${billBox}
         <dl><div><dt>전체 사용량</dt><dd>${won(tot) || 0} kWh</dd></div><div><dt>한전 요금 합계</dt><dd>${ks != null ? won(ks) + ' 원' : '–'}</dd></div><div><dt>호실 배분 합계</dt><dd>${alloc ? won(alloc) + ' 원' : '–'}</dd></div></dl>
       </div>
       <table class="grid"><caption>${ymShort(S.cur)} 전기검침 · 검침일 ${+S.cur.slice(5)}월 10일</caption>
       <thead><tr><th>호수</th><th>이름</th><th>전월 검침</th><th>당월 검침</th><th>사용량(kWh)</th><th>전기 사용료(원)</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="hint">① 호실별 <b>사용량(kWh)</b> 을 넣고 Enter 를 누르면 다음 호실로 넘어갑니다. 당월 검침 숫자를 넣으면 사용량이 자동으로 계산되고, 사용량을 넣으면 당월 검침이 맞춰집니다. 이름은 이 탭에서만 고칠 수 있습니다. ② 층별 한전 요금을 넣으면 <b>그 층 요금 × (호실 사용량 ÷ 그 층 사용량)</b> 에 공동전기료를 더해 호실별 전기 사용료가 계산되고, 납부현황의 사용료 칸에 들어갑니다.</p>`;
+      <p class="hint">① 호실별 <b>사용량(kWh)</b> 을 넣고 Enter 를 누르면 다음 호실로 넘어갑니다. 당월 검침 숫자를 넣으면 사용량이 자동으로 계산되고, 사용량을 넣으면 당월 검침이 맞춰집니다. 이름은 이 탭에서만 고칠 수 있습니다. ② 전기 사용료는 <b>(그 층 청구금액 − 기본요금 − TV수신료) × (호실 사용량 ÷ 그 층 사용량)</b> 에 공동전기료를 더한 금액이고, 납부현황의 사용료 칸에 들어갑니다. 기본요금과 TV수신료는 고정비에 들어 있습니다.</p>`;
   }
 
   function viewPay() {
@@ -209,15 +229,16 @@
           <span class="arr-btns"><button type="button" class="mini-btn ok" data-act="settle" data-room="${room.id}" data-v="in" title="기간 안에 받았으면 가산료 없이 완납 처리">기간 내 받음</button><button type="button" class="mini-btn" data-act="settle" data-room="${room.id}" data-v="late" title="가산료까지 받았으면 완납 처리하고 비고에 기록">가산료 포함 받음</button></span></div>` : '';
         rows += `<tr data-row="${room.id}" class="${c.rentPaid === 'N' || c.mgmtPaid === 'N' || a.principal ? 'row-bad' : ''}"><th scope="row">${room.label}<small>${h(c.tenant) || '공실'}</small></th>
           <td>${inp(room.id, 'rent', c.rent, { label: room.label + ' 임대료' })}</td><td class="c">${seg(room.id, 'rentPaid', c.rentPaid)}</td>
-          <td>${c.metered ? `<span class="fixed" title="${h(m.fixedItems.map((x) => x[0] + ' ' + won(x[1])).join(' + '))}">${won(c.fixed)}</span>` : inp(room.id, 'fixed', c.fixed, { label: room.label + ' 고정 관리비' })}</td>
-          <td>${c.metered ? inp(room.id, 'fee', c.fee, { ph: '검침·한전요금 입력 후 자동', cls: c.feeManual ? 'manual' : '', label: room.label + ' 사용료' }) : '<span class="fixed muted" title="1층 상가는 전기요금을 직접 납부합니다">–</span>'}</td>
+          <td>${c.metered ? `<span class="fixed" title="${h(fixedItemsOf(S.cur, room.floor).map((x) => x[0] + ' ' + won(x[1])).join(' + '))}">${won(c.fixed)}</span>` : inp(room.id, 'fixed', c.fixed, { label: room.label + ' 고정 관리비' })}</td>
+          <td>${c.metered ? inp(room.id, 'fee', c.fee, { ph: '사용량 입력 후 자동', cls: c.feeManual ? 'manual' : '', label: room.label + ' 사용료' }) : '<span class="fixed muted" title="1층 상가는 전기요금을 직접 납부합니다">–</span>'}</td>
           <td class="n strong">${won(c.mgmt)}</td><td class="c">${seg(room.id, 'mgmtPaid', c.mgmtPaid)}</td>
           <td class="arr-cell">${arr}</td>
           <td>${inp(room.id, 'note', c.note, { text: 1, cls: 'note', label: room.label + ' 비고' })}</td></tr>`;
       });
     });
-    const fixedPanel = `<details class="fixedbox"><summary>2~5층 고정비 내역 <b>${won(fixedSum(S.cur))}원</b> <span class="muted">(${m.fixedItems.map((x) => x[0] + ' ' + won(x[1])).join(' + ')})</span> — 눌러서 금액 수정</summary>
-      <div class="fixeditems">${m.fixedItems.map((x, i) => `<label>${x[0]} <input class="in" type="text" inputmode="numeric" data-f="fixedItem" data-i="${i}" data-k="fixedItem|${i}" value="${won(x[1])}"> 원</label>`).join('')}
+    const hasBill = !!bill(S.cur), fromBill = (i) => hasBill && (i === 1 || i === 2);
+    const fixedPanel = `<details class="fixedbox"><summary>2~5층 고정비 내역 <b>${fixedText(S.cur)}</b> <span class="muted">(${m.fixedItems.map((x, i) => x[0] + (fromBill(i) ? '' : ' ' + won(x[1]))).join(' + ')})</span> — 눌러서 금액 수정</summary>
+      <div class="fixeditems">${m.fixedItems.map((x, i) => fromBill(i) ? `<span>${x[0]} <b>${[2, 3, 4, 5].map((f) => `${f}층 ${won(fixedItemsOf(S.cur, f)[i][1])}`).join(' · ')}</b> 원 <small class="muted">(한전 청구서 금액 ÷ 7호실)</small></span>` : `<label>${x[0]} <input class="in" type="text" inputmode="numeric" data-f="fixedItem" data-i="${i}" data-k="fixedItem|${i}" value="${won(x[1])}"> 원</label>`).join('')}
       <p class="muted">1층은 일반관리비만 고정입니다 (101/102호 100,000원 · 103호 60,000원 · 104호 60,000원). 여기서 바꾼 금액은 이번 달부터 적용됩니다.</p></div></details>`;
     return fixedPanel + `<div class="sheet"><table class="grid pay"><caption>${ymShort(S.cur)} 월별 임대료·관리비 납부현황</caption>
       <thead><tr><th rowspan="2">호수 · 이름</th><th rowspan="2">임대료</th><th rowspan="2">완납/미납</th><th colspan="3">관리비</th><th rowspan="2">완납/미납</th><th rowspan="2">전월 미납<br>+ 가산료 5%</th><th rowspan="2">비고</th></tr>
@@ -249,7 +270,7 @@
   }
   // 화면 맨 아래 「요금 계산 기준」 — 지금 적용 중인 금액으로 보여 준다
   function renderPolicy() {
-    const m = M(S.cur), items = m.fixedItems, mo = +S.cur.slice(5), pm = +shift(S.cur, -1).slice(5);
+    const hasBill = !!bill(S.cur), items = M(S.cur).fixedItems.map((x, i) => (hasBill && (i === 1 || i === 2) ? [x[0], null] : x)), mo = +S.cur.slice(5), pm = +shift(S.cur, -1).slice(5);
     const f1 = byFloor(1).map((room) => `${room.label} ${won(calc(room).fixed) || 0}원`).join(' · ');
     const chk = '<em class="chk">확인 필요</em>';
     const box = document.getElementById('policy'); if (!box) return;
@@ -259,14 +280,15 @@
           <li>호실마다 정해진 월 임대료를 받습니다. 금액은 납부현황 표에서 고칠 수 있고, 고친 달부터 이어집니다.</li>
           <li>${h(S.cfg.notice)}</li></ul></section>
         <section><h3>2. 관리비 = 고정비 + 사용료</h3><ul>
-          <li><b>2~5층 고정비 ${won(fixedSum(S.cur))}원</b> = ${items.map((x) => `${x[0]} ${won(x[1])}원`).join(' + ')}</li>
+          <li><b>2~5층 고정비 ${fixedText(S.cur)}</b> = ${items.map((x) => x[1] == null ? x[0] : `${x[0]} ${won(x[1])}원`).join(' + ')}</li>
+          <li><b>전기 기본요금과 TV 수신료</b>는 한전 청구서에 찍힌 그 층 금액을 7개 호실로 똑같이 나눈 금액입니다.${hasBill ? ' (' + [2, 3, 4, 5].map((f) => { const k = floorBill(S.cur, f); return k ? `${f}층 기본요금 ${won(k.baseEach)}원·TV ${won(k.tvEach)}원` : ''; }).filter(Boolean).join(' / ') + ')' : ''}</li>
           <li><b>1층은 일반관리비만 고정</b>이고 전기 기본요금·TV 수신료·인터넷 요금은 없습니다. (${f1})</li>
           <li>사용료는 아래 3번의 전기 사용료입니다.</li></ul></section>
         <section><h3>3. 전기 사용료</h3><ul>
           <li>매월 10일에 검침합니다. 사용기간은 전월 10일 ~ 당월 9일입니다. (이번 달: ${pm}/10 ~ ${mo}/09)</li>
           <li>호실별 사용량(kWh)을 넣습니다. 사용량 = 당월 검침 − 전월 검침.</li>
-          <li>한전 전기요금은 <b>층마다 따로</b> 나옵니다. 한전에 전화해서 확인한 2·3·4·5층 요금을 각각 넣습니다.</li>
-          <li><b>호실 사용 요금 = 그 층 한전 요금 × (호실 사용량 ÷ 그 층 사용량)</b></li>
+          <li>한전 전기요금 청구서는 <b>층마다 따로</b> 나옵니다. 청구서 금액은 「① 전기 검침」 위쪽에 적혀 있고, 따로 입력하지 않습니다.</li>
+          <li><b>호실 사용 요금 = (그 층 청구금액 − 기본요금 − TV수신료) × (호실 사용량 ÷ 그 층 사용량)</b></li>
           <li><b>공용 전기요금은 건물 전체 1건</b>입니다. 2~5층 ${METERED.length}개 호실에 똑같이 나눠 공동전기료로 받습니다.</li>
           <li><b>1층은 상가</b>라서 전기요금을 입주자가 직접 냅니다. 검침·사용료를 입력하지 않습니다.</li></ul></section>
         <section><h3>4. 완납 / 미납과 가산료</h3><ul>
@@ -381,8 +403,6 @@
     if (el.id === 'datafile') return importData(el);
     if (el.dataset.cfg) { S.cfg[el.dataset.cfg] = el.value.trim(); cfgOpen = true; persist(); return renderPanel(); }
     if (!f || locked()) return;
-    if (f === 'common') { month(S.cur).common = num(el.value); return rerender(); }
-    if (f === 'kepcoF') { const m = month(S.cur); (m.kepcoF || (m.kepcoF = {}))[el.dataset.floor] = num(el.value); return rerender(); }
     if (f === 'fixedItem') { month(S.cur).fixedItems[+el.dataset.i][1] = num(el.value) || 0; fixedOpen = true; return rerender(); }
     const r = rec(S.cur, el.dataset.room);
     if (f === 'note') r.note = el.value.trim();
@@ -427,15 +447,15 @@
     rows.push([C('합계', ST.sumLabel), C('', ST.sumLabel), C(t.rentSum, ST.sumNum), C(`완납 ${t.rentY} / 미납 ${t.rentN}`, ST.sumLabel), C(t.fixedSum, ST.sumNum), C(t.feeSum, ST.sumNum), C(t.mgmtSum, ST.sumNum),
       C(`완납 ${t.mgmtY} / 미납 ${t.mgmtN}`, ST.sumLabel), C(t.arrP || '', ST.sumNum), C(t.arrL || '', ST.sumNum), C('', ST.sumLabel)]);
     const n = rows.length;
-    rows.push([], [C(`※ 2~5층 고정비 ${won(fixedSum(ym))}원 = ${m.fixedItems.map((x) => x[0] + ' ' + won(x[1])).join(' + ')}   /   1층은 일반관리비만 고정`, ST.sub)],
-      [C(`※ 사용료 = 층별 한전 전기요금 × (호실 사용량 ÷ 그 층 사용량) + 공동전기료(공용 요금 ÷ ${METERED.length}호실)   /   마감일까지 미납 시 연체료 5%`, ST.sub)]);
+    rows.push([], [C(`※ 2~5층 고정비 ${fixedText(ym)} = ${m.fixedItems.map((x, i) => x[0] + (bill(ym) && (i === 1 || i === 2) ? '(한전 청구서 ÷ 7호실)' : ' ' + won(x[1]))).join(' + ')}   /   1층은 일반관리비만 고정`, ST.sub)],
+      [C(`※ 사용료 = (층별 한전 청구금액 − 기본요금 − TV수신료) × (호실 사용량 ÷ 그 층 사용량) + 공동전기료(공용 요금 ÷ ${METERED.length}호실)   /   마감일까지 미납 시 연체료 5%`, ST.sub)]);
     return { name: `${ymShort(ym)} 납부현황`, widths: [11, 16, 12, 12, 11, 11, 11, 12, 12, 11, 34], heights: { 0: 30 }, freeze: 4, rows,
       merges: ['A1:K1', 'A2:K2', 'A3:A4', 'B3:B4', 'C3:C4', 'D3:D4', 'E3:G3', 'H3:H4', 'I3:I4', 'J3:J4', 'K3:K4', `A${n + 2}:K${n + 2}`, `A${n + 3}:K${n + 3}`] };
   }
   function meterSheet(ym) {
-    const [y, mo] = ym.split('-').map(Number), p = shift(ym, -1), m = M(ym), tot = totalUsage(ym);
+    const [y, mo] = ym.split('-').map(Number), p = shift(ym, -1), bl = bill(ym), tot = totalUsage(ym);
     const rows = [[C(`파크빌 ${ymLong(ym)} 전기검침`, ST.title)],
-      [C(`검침일: ${y}.${mo}.10   사용기간: ${+p.slice(5)}/10 ~ ${mo}/09   한전 요금: ${[2, 3, 4, 5].map((f) => `${f}층 ${floorKepco(ym, f) != null ? won(floorKepco(ym, f)) : '미입력'}`).join(' / ')} / 공용 ${m.common != null ? won(m.common) : '미입력'}   전체 사용량: ${won(tot) || 0}kWh`, ST.sub)],
+      [C(`검침일: ${y}.${mo}.10   사용기간: ${+p.slice(5)}/10 ~ ${mo}/09   한전 청구금액: ${bl ? [2, 3, 4, 5].map((f) => `${f}층 ${floorBill(ym, f) ? won(floorBill(ym, f).total) : '-'}`).join(' / ') + ` / 공용 ${won(bl.common)}` : '청구서 없음'}   전체 사용량: ${won(tot) || 0}kWh`, ST.sub)],
       ['호수', '이름', '전월 검침', '당월 검침', '사용량(kWh)', '전기 사용료(원)'].map((x) => C(x, ST.head))];
     FLOORS.slice(1).forEach((f) => {
       let u = 0, a = 0;
@@ -443,7 +463,7 @@
         const c = calc(room, ym); u += c.usage > 0 ? c.usage : 0; a += c.autoFee || 0;
         rows.push([C(room.label, ST.center), C(c.tenant, ST.left), C(c.prev ?? '', ST.num), C(c.read ?? '', ST.num), C(c.usage ?? '', ST.num), C(c.autoFee ?? '', ST.num)]);
       });
-      rows.push([C(`${f}층 소계`, ST.sumLabel), C(floorKepco(ym, f) != null ? `한전 요금 ${won(floorKepco(ym, f))}원` : '', ST.sumLabel), C('', ST.sumLabel), C('', ST.sumLabel), C(u, ST.sumNum), C(a || '', ST.sumNum)]);
+      rows.push([C(`${f}층 소계`, ST.sumLabel), C(floorBill(ym, f) ? `사용량 배분 ${won(floorBill(ym, f).pool)}원` : '', ST.sumLabel), C('', ST.sumLabel), C('', ST.sumLabel), C(u, ST.sumNum), C(a || '', ST.sumNum)]);
     });
     return { name: `${ymShort(ym)} 전기검침`, widths: [10, 18, 13, 13, 13, 16], heights: { 0: 30 }, freeze: 3, rows, merges: ['A1:F1', 'A2:F2'] };
   }
@@ -548,11 +568,10 @@
   // 자동 점검용(#test…): 저장소를 건드리지 않고 예시 값을 넣어 화면과 엑셀 내용을 확인한다
   if (TEST) {
     const mode = location.hash.slice(6);
-    if (mode) month('2026-11').kepcoF = { 2: 255460, 3: 282400, 4: 260680, 5: 246480 };
     if (mode === 'meter') S.tab = 'meter';
     if (mode === 'hist') S.cur = '2025-03';
     if (mode === 'undo') { render(); const a = peek('2026-11', '201').read; rec('2026-11', '201').read = 99999; rec('2026-11', '202').rentPaid = 'N'; render(); const b = peek('2026-11', '201').read; S.cur = '2026-12'; render(); undo(); document.body.dataset.undo = [a, b, peek('2026-11', '201').read, peek('2026-11', '202').rentPaid || '-', S.cur, undoStack.length].join('|'); }
-    if (mode === 'rc') { month('2026-11').common = 132550; S.sel = '205'; }
+    if (mode === 'rc') S.sel = '205';
     if (mode.startsWith('dec')) { S.cur = '2026-12'; S.tab = 'meter'; Object.assign(rec('2026-12', '201'), { usage: 150, read: 50378 }); rec('2026-12', '202').read = 38400; month('2026-12').lock = { meter: mode === 'decL' }; }
     if (mode === 'late' || mode === 'settle') {
       Object.assign(rec('2026-11', '201'), { rentPaid: 'N', mgmtPaid: 'N' }); rec('2026-11', '305').mgmtPaid = 'N'; rec('2026-11', '202').rentPaid = 'Y';
