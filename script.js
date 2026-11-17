@@ -28,7 +28,9 @@
     data.patches.forEach((p) => {
       if (s.applied.includes(p.id)) return;
       const m = s.months[p.ym] || (s.months[p.ym] = newMonth());
-      for (const id in p.usage || {}) (m.r[id] || (m.r[id] = {})).usage = p.usage[id];
+      // usage 값이 null 이면 직접 넣은 사용량을 지워서 「당월 검침 − 전월 검침」으로 돌아가게 한다
+      for (const id in p.usage || {}) { const r = m.r[id] || (m.r[id] = {}); if (p.usage[id] == null) delete r.usage; else r.usage = p.usage[id]; }
+      for (const id in p.read || {}) (m.r[id] || (m.r[id] = {})).read = p.read[id];
       s.applied.push(p.id);
     });
   }
