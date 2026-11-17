@@ -215,8 +215,8 @@
       : `<div class="ktitle"><b>한전 전기요금 청구서</b><small>${S.cur >= FIRST_PAY_MONTH ? `${ymLong(S.cur)}분 청구서가 아직 반영되지 않았습니다. 청구서가 반영되면 전기 사용료가 자동으로 계산됩니다.` : '이전 관리 파일에서 옮긴 기록입니다.'}</small></div>`;
     return `<div class="sheet"><div class="kepco">
         ${billBox}
-        <dl><div><dt>전체 사용량</dt><dd>${won(tot) || 0} kWh</dd></div><div><dt>한전 요금 합계</dt><dd>${ks != null ? won(ks) + ' 원' : '–'}</dd></div><div><dt>호실에서 받는 전기요금 합계</dt><dd>${alloc ? won(alloc + fixedElec) + ' 원' : '–'}</dd></div></dl>
-        ${alloc && bl ? `<p class="ksum">호실에서 받는 합계 ${won(alloc + fixedElec)}원 = 기본요금·TV수신료(고정비에 포함) ${won(fixedElec)}원 + 사용 요금·공동전기료(사용료 칸) ${won(alloc)}원. 호실마다 원 단위로 반올림해서 한전 요금 합계와 몇 원 다를 수 있습니다.</p>` : ''}
+        <dl><div><dt>전체 사용량</dt><dd>${won(tot) || 0} kWh</dd></div><div><dt>한전 요금 합계</dt><dd>${ks != null ? won(ks) + ' 원' : '–'}</dd></div><div><dt>호실 배분 합계 (TV수신료·기본요금 제외)</dt><dd>${alloc ? won(alloc) + ' 원' : '–'}</dd></div><div><dt>전체 합계 금액 (TV수신료·기본요금 포함)</dt><dd>${alloc ? won(alloc + fixedElec) + ' 원' : '–'}</dd></div></dl>
+        ${alloc && bl ? `<p class="ksum">전체 합계 금액 ${won(alloc + fixedElec)}원 = 호실 배분 합계 ${won(alloc)}원 + 기본요금·TV수신료(고정비에 포함) ${won(fixedElec)}원. 호실마다 원 단위로 반올림해서 한전 요금 합계와 몇 원 다를 수 있습니다.</p>` : ''}
       </div>
       <table class="grid"><caption>${ymShort(S.cur)} 전기검침 · 검침일 ${+S.cur.slice(5)}월 10일</caption>
       <thead><tr><th>호수</th><th>이름</th><th>전월 검침</th><th>당월 검침</th><th>사용량(kWh)</th><th>전기 사용료(원)</th></tr></thead><tbody>${rows}</tbody></table></div>
