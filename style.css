@@ -124,3 +124,4 @@ main { min-width: 0; padding: 16px 0 40px; }
 .kepco .bill { flex-basis: 100%; border-collapse: collapse; background: #fff; font-variant-numeric: tabular-nums; }
 .kepco .bill th, .kepco .bill td { border: 1px solid var(--line); padding: 7px 10px; text-align: right; font-size: 1rem; }
 .kepco .bill thead th { text-align: center; font-size: .85rem; background: #f6efd0; } .kepco .bill tbody th { text-align: center; } .kepco .bill td.l { text-align: left; }
+.kepco .ksum { flex-basis: 100%; margin: 0; text-align: right; font-size: .85rem; color: var(--sub); }
