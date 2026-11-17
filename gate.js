@@ -2,7 +2,7 @@
    비밀번호는 어디에도 저장·전송하지 않고, 암호 풀기는 이 브라우저 안에서만 한다. */
 (async function () {
   const load = (src) => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.body.appendChild(s); });
-  const boot = async () => { document.body.classList.remove('gated'); await load('excel.js?v=13'); await load('script.js?v=13'); };
+  const boot = async () => { document.body.classList.remove('gated'); await load('excel.js?v=14'); await load('script.js?v=14'); };
   const b64 = (t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
   let enc;
   try { const r = await fetch('parkville-data.enc', { cache: 'no-store' }); if (!r.ok) throw 0; enc = await r.json(); } catch (e) { return boot(); }
