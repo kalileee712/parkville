@@ -156,7 +156,7 @@
     const nm = (c.tenant || '').split(/[(.]/).filter(Boolean).pop() || '', name = nm.length === 3 ? nm[0] + '*' + nm[2] : nm.length === 2 ? nm[0] + '*' : nm;
     return { room, c, name, general, base, tv, net, use, common, usage: c.usage, elecSub: (base || 0) + use + common + (tv || 0), total, unpaid,
       unpaidLabel: un.length ? [...new Set(un.map((x) => +x.ym.slice(5) + '월'))].join('·') : `${+p.slice(5)}월`, within: total + unpaid, late, after: total + unpaid + late,
-      period: `${p.slice(2, 4)}.${p.slice(5)}/10~${String(y).slice(2)}.${String(mo).padStart(2, '0')}/09`, y, mo, due: `${String(y).slice(2)}년 ${mo}월${S.cfg.dueDay}일` };
+      period: `${p.slice(2, 4)}.${p.slice(5)}/10~${String(y).slice(2)}.${String(mo).padStart(2, '0')}/09`, y, mo, due: `${String(y).slice(2)}년 ${mo}월${S.cfg.dueDay}일`, dueShort: `${mo}월 ${S.cfg.dueDay}일`, afterShort: (() => { const d = new Date(y, mo - 1, (Number(S.cfg.dueDay) || 25) + 1); return `${d.getMonth() + 1}월 ${d.getDate()}일`; })() };
   }
   function summary(ym = S.cur) {
     const t = { readDone: 0, readAll: METERED.length, rentY: 0, rentN: 0, mgmtY: 0, mgmtN: 0, rentSum: 0, mgmtSum: 0, fixedSum: 0, feeSum: 0, unpaid: 0, unpaidAmt: 0, arrP: 0, arrL: 0, arrN: 0 };
@@ -336,9 +336,9 @@
         <tr><td rowspan="2" class="c">통신요금</td><td class="c">인터넷.유선요금</td><td class="n">${n(r.net)}</td></tr><tr><td>&nbsp;</td><td></td></tr>
         <tr><td colspan="2" class="c g">당월 요금 합계</td><td class="n strong">${n(r.total)}</td></tr>
         <tr><td colspan="2" class="c g">미 납 금 액(${r.unpaidLabel})</td><td class="n">${n(r.unpaid)}</td></tr>
-        <tr><td colspan="2" class="c">납 기 내 금 액</td><td class="n strong">${n(r.within)}</td></tr>
-        <tr><td colspan="2" class="c">연 체 료 (5%)</td><td class="n">${n(r.late)}</td></tr>
-        <tr><td colspan="2" class="c g">납 기 후 금 액</td><td class="n">${n(r.after)}</td></tr>
+        <tr><td colspan="2" class="c g">납기내 금액 (${r.dueShort}까지)</td><td class="n g">${n(r.within)}</td></tr>
+        <tr><td colspan="2" class="c">연체료 5% (${r.afterShort}부터)</td><td class="n">${n(r.late)}</td></tr>
+        <tr><td colspan="2" class="c">납기후 금액 (${r.afterShort}부터)</td><td class="n">${n(r.after)}</td></tr>
         <tr><td colspan="3" class="c g">${h(S.cfg.notice)}</td></tr>
         <tr><td colspan="3" class="c">입금계좌 : ${h(S.cfg.bank)}</td></tr><tr><td colspan="3" class="c">예금주 : ${h(S.cfg.holder)}</td></tr>
         <tr><td colspan="3" class="c">납부 마감일 ${r.due}</td></tr><tr><td colspan="3" class="c">파크빌 관리사무실 &nbsp; 수납인</td></tr>
@@ -510,9 +510,9 @@
       put(18, '통신요금', '인터넷.유선요금', n(r.net)); put(19, '', '', ''); tall(18, 2);
       two(20, '당월 요금 합계', n(r.total), ST.gray, ST.grayNum);
       two(21, `미 납 금 액(${r.unpaidLabel})`, n(r.unpaid), ST.gray, ST.num);
-      two(22, '납 기 내 금 액', n(r.within), ST.boldC, ST.num);
-      two(23, '연 체 료 (5%)', n(r.late), ST.center, ST.num);
-      two(24, '납 기 후 금 액', n(r.after), ST.gray, ST.num);
+      two(22, `납기내 금액 (${r.dueShort}까지)`, n(r.within), ST.gray, ST.grayNum);
+      two(23, `연체료 5% (${r.afterShort}부터)`, n(r.late), ST.center, ST.num);
+      two(24, `납기후 금액 (${r.afterShort}부터)`, n(r.after), ST.center, ST.num);
       wide(25, S.cfg.notice, ST.gray); wide(26, `입금계좌 : ${S.cfg.bank}`, ST.center); wide(27, `예금주 : ${S.cfg.holder}`, ST.center);
       wide(28, `납부 마감일 ${r.due}`, ST.center); wide(29, '파크빌 관리사무실      수납인', ST.center);
     });
